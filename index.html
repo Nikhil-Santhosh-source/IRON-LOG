@@ -191,10 +191,11 @@
     color: var(--text-muted);
     font-family: "Work Sans", sans-serif;
     font-weight: 600;
-    font-size: 14px;
-    padding: 9px 0;
+    font-size: 13px;
+    padding: 9px 2px;
     border-radius: 9px;
     cursor: pointer;
+    white-space: nowrap;
   }
 
   .tabs button[aria-selected="true"] {
@@ -254,6 +255,8 @@
     font-size: 16px;
     width: 100%;
   }
+
+  textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 
   input:focus, select:focus, textarea:focus, button:focus-visible {
     outline: 2px solid var(--accent);
@@ -526,6 +529,45 @@
 
   .weight-list { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); }
 
+  /* ---------- journal ---------- */
+
+  .journal-entry {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 10px;
+    background: var(--surface);
+  }
+
+  .journal-entry .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .journal-entry .date {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .journal-entry .title {
+    font-weight: 700;
+    font-size: 15px;
+    margin-top: 2px;
+  }
+
+  .journal-entry .text {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
   footer.credit {
     text-align: center;
     color: var(--text-muted);
@@ -661,9 +703,10 @@
   </div>
 
   <div class="tabs" role="tablist">
-    <button role="tab" id="tabBtnLog" aria-selected="true" type="button">Workout</button>
+    <button role="tab" id="tabBtnLog" aria-selected="true" type="button">Log</button>
     <button role="tab" id="tabBtnProgress" aria-selected="false" type="button">Progress</button>
     <button role="tab" id="tabBtnWeight" aria-selected="false" type="button">Weight</button>
+    <button role="tab" id="tabBtnJournal" aria-selected="false" type="button">Journal</button>
   </div>
 </header>
 
@@ -788,6 +831,31 @@
     <div id="weightList"></div>
   </section>
 
+  <section class="view" id="viewJournal">
+    <div class="card">
+      <div class="field-row">
+        <div class="field">
+          <label for="journalDate">Date</label>
+          <input type="date" id="journalDate">
+        </div>
+        <div class="field" style="flex-basis:60%">
+          <label for="journalTitle">Title (optional)</label>
+          <input id="journalTitle" placeholder="e.g. New split, felt strong">
+        </div>
+      </div>
+      <div class="field-row" style="margin-top:10px">
+        <div class="field" style="flex-basis:100%">
+          <label for="journalText">Entry</label>
+          <textarea id="journalText" rows="4" placeholder="Write about your split, how an exercise felt, form cues, what to change next time..."></textarea>
+        </div>
+      </div>
+      <button class="btn-primary" id="addJournalBtn" type="button">Save entry</button>
+    </div>
+
+    <h2 class="section-title">Entries</h2>
+    <div id="journalList"></div>
+  </section>
+
 </main>
 
 <footer class="credit">Your data lives on this page &mdash; logged straight from your phone.</footer>
@@ -844,6 +912,7 @@
   state.unit = state.unit || "kg";
   state.workouts = state.workouts || [];
   state.bodyweights = state.bodyweights || [];
+  state.journal = state.journal || [];
   state.rest = state.rest || { duration: 90, autoStart: true };
 
   var activeTab = "log";
@@ -1334,6 +1403,31 @@
     });
   }
 
+  function renderJournal() {
+    var list = document.getElementById("journalList");
+    list.innerHTML = "";
+    var entries = state.journal.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    if (!entries.length) {
+      list.appendChild(el("div", { class: "empty", text: "Nothing written yet. Jot down notes about your split, a new PR, or how a session felt." }));
+      return;
+    }
+    entries.forEach(function (j) {
+      var left = el("div", {}, [
+        el("div", { class: "date", text: formatDay(j.date) }),
+        j.title ? el("div", { class: "title", text: j.title }) : null
+      ]);
+      var trash = el("button", { class: "trash", "aria-label": "Delete entry", html: trashSVG });
+      var top = el("div", { class: "top" }, [left, trash]);
+      var textEl = el("div", { class: "text", text: j.text });
+      var card = el("div", { class: "journal-entry" }, [top, textEl]);
+      trash.addEventListener("click", function () {
+        state.journal = state.journal.filter(function (x) { return x.id !== j.id; });
+        persist();
+      });
+      list.appendChild(card);
+    });
+  }
+
   function render() {
     renderHeader();
     renderExerciseOptions();
@@ -1342,6 +1436,7 @@
     renderWeightList();
     renderWeightChart();
     renderProgress();
+    renderJournal();
   }
 
   // ---------- events ----------
@@ -1352,15 +1447,18 @@
   document.getElementById("tabBtnLog").addEventListener("click", function () { switchTab("log"); });
   document.getElementById("tabBtnProgress").addEventListener("click", function () { switchTab("progress"); });
   document.getElementById("tabBtnWeight").addEventListener("click", function () { switchTab("weight"); });
+  document.getElementById("tabBtnJournal").addEventListener("click", function () { switchTab("journal"); });
 
   function switchTab(tab) {
     activeTab = tab;
     document.getElementById("viewLog").classList.toggle("active", tab === "log");
     document.getElementById("viewProgress").classList.toggle("active", tab === "progress");
     document.getElementById("viewWeight").classList.toggle("active", tab === "weight");
+    document.getElementById("viewJournal").classList.toggle("active", tab === "journal");
     document.getElementById("tabBtnLog").setAttribute("aria-selected", tab === "log");
     document.getElementById("tabBtnProgress").setAttribute("aria-selected", tab === "progress");
     document.getElementById("tabBtnWeight").setAttribute("aria-selected", tab === "weight");
+    document.getElementById("tabBtnJournal").setAttribute("aria-selected", tab === "journal");
     if (tab === "weight") renderWeightChart();
     if (tab === "progress") renderProgress();
   }
@@ -1498,6 +1596,17 @@
       document.getElementById("noteInput").value = "";
     }
 
+    persist();
+  });
+
+  document.getElementById("addJournalBtn").addEventListener("click", function () {
+    var date = document.getElementById("journalDate").value || todayStr();
+    var title = document.getElementById("journalTitle").value.trim();
+    var text = document.getElementById("journalText").value.trim();
+    if (!text) { document.getElementById("journalText").focus(); return; }
+    state.journal.push({ id: uid(), date: date, title: title || null, text: text });
+    document.getElementById("journalTitle").value = "";
+    document.getElementById("journalText").value = "";
     persist();
   });
 
@@ -1699,6 +1808,7 @@
 
   document.getElementById("logDate").value = selectedDate;
   document.getElementById("bwDate").value = todayStr();
+  document.getElementById("journalDate").value = todayStr();
   resetSetRows(3);
   document.getElementById("autoRestToggle").checked = !!state.rest.autoStart;
   highlightPreset(state.rest.duration);
